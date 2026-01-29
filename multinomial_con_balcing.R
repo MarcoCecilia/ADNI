@@ -1,4 +1,4 @@
-getwd()
+
 
 library(nnet)
 library(cluster)
@@ -14,7 +14,7 @@ library(tibble)
 #----fase1-----
 
 # Carica il dataset
-alz <- read.csv("alz_finale_unico.csv")
+alz <- read_excel("Dataset_Alz_ICV_final.xlsx")
 
 # Trasforma la variabile DIAGNOSIS in fattore con etichette esplicite
 alz$DIAGNOSIS <- factor(alz$DIAGNOSIS,
@@ -44,7 +44,7 @@ ggplot(alz, aes(x = DIAGNOSIS, fill = DIAGNOSIS)) +
   theme_minimal()
 
 
-#-----Codice R per grafici esplorativi (boxplot)----
+#grafici esplorativi (boxplot)
 
 # Elenca le variabili numeriche cerebrali
 brain_vars <- c("Hippocampus_Total", "Thalamus_Total", "SuperiorTemporal_Total", 
@@ -68,7 +68,7 @@ ggplot(alz_long, aes(x = DIAGNOSIS, y = Value, fill = DIAGNOSIS)) +
   theme_minimal() +
   theme(legend.position = "none")
 
-#---- Fase 2: Modello multinomiale con class weights----
+# Fase 2: Modello multinomiale con class weights
 
 # Calcola la frequenza per classe
 class_freq <- table(alz_clean$DIAGNOSIS)
@@ -99,7 +99,7 @@ print(p)
 
 #nessuna variabile è significativa :(, cambiamo metodo per balancing!
 
-#-----fase2:Codice R: SMOTE + Multinom----
+#fase2: SMOTE + Multinom
 
 # Rimuovi variabili non numeriche (Subject_ID, gender)
 alz_smote <- alz_clean %>% 
@@ -109,7 +109,8 @@ alz_smote <- alz_clean %>%
 alz_smote$DIAGNOSIS_NUM <- as.numeric(alz_clean$DIAGNOSIS)
 
 # Seleziona solo variabili numeriche per SMOTE
-X <- alz_smote %>% select(-DIAGNOSIS, -DIAGNOSIS_NUM)
+names(alz_smote)
+X <- alz_smote %>% select(-genotype,-rs744373_C,-rs11767557_C,-rs11771145_A, -rs11136000_T,-rs3851179_A,-rs17125944_C, -rs3764650_G,-Visit, -DIAGNOSIS, -DIAGNOSIS_NUM)
 target <- alz_smote$DIAGNOSIS_NUM
 
 # Applica SMOTE multiclass
@@ -139,7 +140,7 @@ p <- 2 * (1 - pnorm(abs(z)))
 print(p)
 #alcune variabili sono significative! soprattutto per distinguere AD da CN (per MCI no) ma a noi interessa questo!
 
-#----- Codice completo per plottare tutte le variabili cerebrali----
+# Codice completo per plottare tutte le variabili cerebrali
 # Funzione per plottare l'effetto di una covariata
 plot_multinom_effect <- function(model, data, covariate) {
   x_seq <- seq(min(data[[covariate]], na.rm = TRUE),
@@ -190,7 +191,7 @@ p5 <- 2 * (1 - pnorm(abs(z5)))
 print(p5)
 #tutte significative per AD
 
-#-----Modello 3 smote: Parsimonioso (3 variabili forti)-----
+#Modello 3 smote: Parsimonioso (3 variabili forti)
 # Modello 2: 3 variabili chiave
 model_3vars <- multinom(
   DIAGNOSIS ~ Hippocampus_Total + InfLatVentricle_Total + Precuneus_Total,
@@ -203,7 +204,7 @@ z3 <- summary(model_3vars)$coefficients / summary(model_3vars)$standard.errors
 p3 <- 2 * (1 - pnorm(abs(z3)))
 print(p3)
 
-#-----Codice R: Effect plot per le 5 variabili del modello finale-----
+# Effect plot per le 5 variabili del modello finale
 
 # Funzione per plottare gli effetti marginali
 plot_multinom_effect <- function(model, data, covariate) {
@@ -239,7 +240,7 @@ for (v in vars_5) {
 }
 
 
-#----smote distribuzione nuova---
+# smote distribuzione nuova
 
 ggplot(alz_balanced, aes(x = DIAGNOSIS, fill = DIAGNOSIS)) +
   geom_bar() +
@@ -250,10 +251,10 @@ ggplot(alz_balanced, aes(x = DIAGNOSIS, fill = DIAGNOSIS)) +
 
 
 #-----undersampling----
-# Sottocampioniamo a 148 (numero di AD)
+# Sottocampioniamo
 alz_under <- alz_clean %>%
   group_by(DIAGNOSIS) %>%
-  sample_n(size = 147) %>%
+  sample_n(size = 37) %>%
   ungroup()
 
 # Verifica
@@ -335,7 +336,7 @@ for (v in final_vars_under) {
 }
 
 
-#-----Codice R per K-Medoids undersampling + Multinomial Model----
+# K-Medoids undersampling + Multinomial Model
 # Librerie
 library(dplyr)
 library(cluster)
@@ -357,7 +358,7 @@ get_medoids_sample <- function(df, group_key, k) {
 }
 
 # Caricamento e preparazione dati
-alz_kmed <- read.csv("alz_finale_unico.csv")
+alz_kmed <- read_excel("Dataset_Alz_ICV_final.xlsx")
 alz_kmed$DIAGNOSIS <- factor(alz_kmed$DIAGNOSIS, levels = c(1, 2, 3), labels = c("CN", "MCI", "AD"))
 alz_kmed <- na.omit(alz_kmed)
 
@@ -466,3 +467,63 @@ fviz_pca_ind(pca_result,
              pointsize = 2.5) +
   ggtitle("PCA - Medoid Samples vs Full Dataset") +
   theme_minimal()
+
+
+#### Mann–Whitney U test
+
+library(dplyr)
+install.packages("effsize")
+library(effsize)
+
+# 1. Sottoinsieme: solo CN e AD sul dataset reale (no SMOTE)
+real_data <- alz_clean %>%
+  filter(DIAGNOSIS %in% c("CN", "AD")) %>%
+  mutate(
+    # assicuro che CN sia il riferimento (così d > 0 significa AD > CN)
+    DIAGNOSIS = factor(DIAGNOSIS),
+    DIAGNOSIS = relevel(DIAGNOSIS, ref = "CN")
+  )
+
+# 2. Statistiche descrittive
+thalamus_summary <- real_data %>%
+  group_by(DIAGNOSIS) %>%
+  summarise(
+    n        = n(),
+    mean_T   = mean(Thalamus_Total, na.rm = TRUE),
+    sd_T     = sd(Thalamus_Total,   na.rm = TRUE)
+  )
+
+thalamus_summary
+
+# 3. Mann–Whitney U test (non parametrico)
+mw_thal <- wilcox.test(
+  Thalamus_Total ~ DIAGNOSIS,
+  data   = real_data,
+  exact  = FALSE,      # per evitare warning su campioni grandi
+  conf.int = TRUE
+)
+
+mw_thal
+
+library(dplyr)
+
+#calcolare il coefficiente di correlazione di Pearson tra il volume del talamo e il volume del ventricolo laterale inferiore, 
+#separatamente per i gruppi AD e CN
+
+# Sottoinsieme reale: solo CN e AD
+ventricular_data <- alz %>%
+  filter(DIAGNOSIS %in% c("CN", "AD")) %>%
+  mutate(DIAGNOSIS = factor(DIAGNOSIS))
+
+# Correlazioni Pearson e p-value per ciascun gruppo
+ventricular_corr <- ventricular_data %>%
+  group_by(DIAGNOSIS) %>%
+  summarise(
+    n        = n(),
+    r        = cor(Thalamus_Total, InfLatVentricle_Total,
+                   use = "complete.obs", method = "pearson"),
+    p_value  = cor.test(Thalamus_Total, InfLatVentricle_Total)$p.value,
+    .groups  = "drop"
+  )
+
+ventricular_corr
