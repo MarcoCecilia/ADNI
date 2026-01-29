@@ -9,7 +9,7 @@ Clinical Characterisation of Alzheimer Disease
    - All preprocessing steps are documented in the notebook: `PreProcessingData.ipynb`.
 
 2. **Exploratory Data Analysis**
-   - An initial exploratory analysis of the dataset was conducted to understand the main characteristics and distributions of the variables.
+   - An initial exploratory analysis of the dataset was conducted to understand the main characteristics and distributions of the variables after was done a normalization in `normalized_data.R`.
    - The analysis code is in `Explorative_Analysis.R`.
    - A detailed report is available in `Explorative_Analysis.docx`.
 
